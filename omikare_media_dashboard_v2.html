@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>オミカレ 媒体別パフォーマンスダッシュボード</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f5f6f8; color: #1a1a1a; padding: 20px; min-height: 100vh; }
+h1 { font-size: 17px; font-weight: 600; color: #111; margin-bottom: 3px; }
+.subtitle { font-size: 12px; color: #999; margin-bottom: 16px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: center; }
+.toolbar label { font-size: 12px; color: #666; }
+select { font-size: 12px; padding: 5px 10px; border-radius: 8px; border: 1px solid #ddd; background: #fff; color: #111; cursor: pointer; outline: none; }
+select:hover { border-color: #aaa; }
+.grain-tabs, .metric-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.gtab, .mtab { font-size: 12px; padding: 5px 14px; border-radius: 20px; border: 1px solid #ddd; background: #fff; color: #666; cursor: pointer; transition: all .15s; outline: none; }
+.gtab:hover, .mtab:hover { border-color: #aaa; color: #333; }
+.gtab.on { background: #111; color: #fff; border-color: #111; }
+.mtab.on { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 10px; font-size: 12px; color: #555; align-items: center; }
+.litem { display: flex; align-items: center; gap: 5px; }
+.lchip { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex-shrink: 0; }
+.chart-wrap { position: relative; width: 100%; height: 360px; background: #fff; border-radius: 12px; border: 1px solid #e8e8e8; padding: 16px; margin-bottom: 10px; }
+.note { font-size: 11px; color: #bbb; line-height: 1.6; padding-top: 8px; border-top: 1px solid #eee; }
+.fy-label { font-size: 11px; background: #f0f0f0; color: #555; padding: 2px 8px; border-radius: 12px; display: inline-block; }
+</style>
+</head>
+<body>
+
+<h1>オミカレ 媒体別パフォーマンスダッシュボード</h1>
+<p class="subtitle">Google・Yahoo・Criteo・RTB House ／ FY2023〜FY2026（11月〜10月）</p>
+
+<div class="toolbar">
+  <label>粒度</label>
+  <div class="grain-tabs">
+    <button class="gtab on" data-g="monthly">月次</button>
+    <button class="gtab" data-g="weekly">週次</button>
+    <button class="gtab" data-g="daily">日次</button>
+  </div>
+  <label style="margin-left:8px">期間</label>
+  <select id="selFY">
+    <option value="all">全期間</option>
+    <option value="FY2023">FY2023（22/11〜23/10）</option>
+    <option value="FY2024">FY2024（23/11〜24/10）</option>
+    <option value="FY2025">FY2025（24/11〜25/10）</option>
+    <option value="FY2026">FY2026（25/11〜26/10）</option>
+  </select>
+</div>
+
+<div class="metric-tabs">
+  <button class="mtab on" data-m="cost">消化（ネット）</button>
+  <button class="mtab" data-m="imp">IMP</button>
+  <button class="mtab" data-m="click">クリック数</button>
+  <button class="mtab" data-m="ctr">CTR</button>
+  <button class="mtab" data-m="cpc">CPC</button>
+  <button class="mtab" data-m="cv">CV（GA）</button>
+  <button class="mtab" data-m="cpa">GA CPA</button>
+</div>
+
+<div class="legend">
+  <span class="litem"><span class="lchip" style="background:#3b82f6"></span>Google</span>
+  <span class="litem"><span class="lchip" style="background:#f97316"></span>Yahoo</span>
+  <span class="litem"><span class="lchip" style="background:#a855f7"></span>Criteo</span>
+  <span class="litem"><span class="lchip" style="background:#22c55e"></span>RTB House</span>
+</div>
+
+<div class="chart-wrap">
+  <canvas id="mainChart" role="img" aria-label="媒体別パフォーマンスグラフ">媒体別推移データ</canvas>
+</div>
+
+<div class="note">
+  ※ FY = 11月〜10月。Google 2025年1月以降はAI-MAX導入でCTR急上昇。Criteo は一部期間配信停止。RTB House は2025年後半に配信停止。週次・日次は月次データを均等按分した参考値です。
+</div>
+
+<script>
+// ── 月次データ（媒体合計、サブキャンペーンはGoogle親行のみ）──
+const MONTHLY = [
+  {m:"22-11",fy:"FY2023",days:30,g:{cost:6852554,imp:1986498,click:143472,ctr:7.22,cpc:48,cv:4394,cpa:1560},y:{cost:573185,imp:360981,click:28129,ctr:7.79,cpc:20,cv:556,cpa:1031},c:{cost:245024,imp:1604844,click:9522,ctr:0.59,cpc:26,cv:296,cpa:828},r:{cost:null,imp:null,click:null,ctr:null,cpc:null,cv:null,cpa:null}},
+  {m:"22-12",fy:"FY2023",days:31,g:{cost:5126992,imp:1159390,click:129746,ctr:11.19,cpc:40,cv:4406,cpa:1164},y:{cost:776901,imp:428195,click:33694,ctr:7.87,cpc:23,cv:674,cpa:1153},c:{cost:168283,imp:1302982,click:7427,ctr:0.57,cpc:23,cv:203,cpa:829},r:{cost:538466,imp:2753797,click:24396,ctr:0.89,cpc:22,cv:521,cpa:1034}},
+  {m:"23-01",fy:"FY2023",days:31,g:{cost:4785615,imp:1450053,click:117525,ctr:8.10,cpc:41,cv:3570,cpa:1341},y:{cost:712092,imp:354520,click:34396,ctr:9.70,cpc:21,cv:535,cpa:1331},c:{cost:146385,imp:1237963,click:6685,ctr:0.54,cpc:22,cv:181,cpa:809},r:{cost:301119,imp:2378154,click:17613,ctr:0.74,cpc:17,cv:280,cpa:1075}},
+  {m:"23-02",fy:"FY2023",days:28,g:{cost:5384876,imp:1443280,click:144567,ctr:10.02,cpc:37,cv:4515,cpa:1193},y:{cost:795772,imp:328094,click:34179,ctr:10.42,cpc:23,cv:576,cpa:1382},c:{cost:222783,imp:1716780,click:10129,ctr:0.59,cpc:22,cv:202,cpa:1103},r:{cost:350219,imp:1903640,click:14760,ctr:0.78,cpc:24,cv:327,cpa:1071}},
+  {m:"23-03",fy:"FY2023",days:31,g:{cost:4085092,imp:1090037,click:120832,ctr:11.09,cpc:34,cv:3735,cpa:1094},y:{cost:776398,imp:321180,click:31851,ctr:9.92,cpc:24,cv:608,cpa:1277},c:{cost:194286,imp:1247460,click:7859,ctr:0.63,cpc:25,cv:167,cpa:1163},r:{cost:574545,imp:3302306,click:26074,ctr:0.79,cpc:22,cv:388,cpa:1481}},
+  {m:"23-04",fy:"FY2023",days:30,g:{cost:3514898,imp:740387,click:96826,ctr:13.08,cpc:36,cv:3105,cpa:1132},y:{cost:781441,imp:301257,click:32166,ctr:10.68,cpc:24,cv:563,cpa:1388},c:{cost:147673,imp:1120000,click:7392,ctr:0.66,cpc:20,cv:118,cpa:1251},r:{cost:328911,imp:1935692,click:15488,ctr:0.80,cpc:21,cv:291,cpa:1130}},
+  {m:"23-05",fy:"FY2023",days:31,g:{cost:5015937,imp:1554966,click:135877,ctr:8.74,cpc:37,cv:4413,cpa:1137},y:{cost:995084,imp:393535,click:40083,ctr:10.19,cpc:25,cv:776,cpa:1282},c:{cost:150545,imp:1142698,click:7199,ctr:0.63,cpc:21,cv:180,cpa:836},r:{cost:371377,imp:2178957,click:17298,ctr:0.79,cpc:21,cv:339,cpa:1096}},
+  {m:"23-06",fy:"FY2023",days:30,g:{cost:4154045,imp:1362327,click:123666,ctr:9.08,cpc:34,cv:3535,cpa:1175},y:{cost:674965,imp:277112,click:30749,ctr:11.10,cpc:22,cv:569,cpa:1186},c:{cost:109582,imp:838636,click:5535,ctr:0.66,cpc:20,cv:143,cpa:766},r:{cost:350259,imp:1810582,click:14406,ctr:0.80,cpc:24,cv:316,cpa:1108}},
+  {m:"23-07",fy:"FY2023",days:31,g:{cost:4093266,imp:1410639,click:128096,ctr:9.08,cpc:32,cv:3621,cpa:1130},y:{cost:842611,imp:361380,click:35622,ctr:9.86,cpc:24,cv:562,cpa:1499},c:{cost:260027,imp:1967869,click:12004,ctr:0.61,cpc:22,cv:230,cpa:1131},r:{cost:331644,imp:1860903,click:15209,ctr:0.82,cpc:22,cv:263,cpa:1261}},
+  {m:"23-08",fy:"FY2023",days:31,g:{cost:6476504,imp:1568950,click:152848,ctr:9.74,cpc:42,cv:5480,cpa:1182},y:{cost:966317,imp:390164,click:36541,ctr:9.37,cpc:26,cv:812,cpa:1190},c:{cost:206414,imp:1732075,click:9180,ctr:0.53,cpc:22,cv:226,cpa:913},r:{cost:600145,imp:3770974,click:31623,ctr:0.84,cpc:19,cv:489,cpa:1227}},
+  {m:"23-09",fy:"FY2023",days:30,g:{cost:6311029,imp:634001,click:133471,ctr:21.05,cpc:47,cv:4258,cpa:1482},y:{cost:722075,imp:270907,click:27822,ctr:10.27,cpc:26,cv:649,cpa:1113},c:{cost:563829,imp:2577859,click:32791,ctr:1.27,cpc:17,cv:536,cpa:1052},r:{cost:399666,imp:2685218,click:24572,ctr:0.92,cpc:16,cv:418,cpa:956}},
+  {m:"23-10",fy:"FY2023",days:31,g:{cost:5001233,imp:612892,click:125440,ctr:20.47,cpc:40,cv:4271,cpa:1171},y:{cost:671091,imp:256997,click:26543,ctr:10.33,cpc:25,cv:634,cpa:1059},c:{cost:396192,imp:2215949,click:22209,ctr:1.00,cpc:18,cv:330,cpa:1201},r:{cost:598742,imp:3546462,click:28274,ctr:0.80,cpc:21,cv:410,cpa:1460}},
+  {m:"23-11",fy:"FY2024",days:30,g:{cost:8312972,imp:1027958,click:142847,ctr:13.90,cpc:58,cv:4702,cpa:1768},y:{cost:600262,imp:226504,click:21595,ctr:9.53,cpc:28,cv:628,cpa:956},c:{cost:162248,imp:1044285,click:8488,ctr:0.81,cpc:19,cv:246,cpa:660},r:{cost:498821,imp:2723013,click:22886,ctr:0.84,cpc:22,cv:405,cpa:1232}},
+  {m:"23-12",fy:"FY2024",days:31,g:{cost:5978914,imp:688845,click:138169,ctr:20.06,cpc:43,cv:4742,cpa:1261},y:{cost:634046,imp:229253,click:22385,ctr:9.76,cpc:28,cv:595,cpa:1066},c:{cost:170068,imp:581952,click:8160,ctr:1.40,cpc:21,cv:114,cpa:1492},r:{cost:600089,imp:3369630,click:26078,ctr:0.77,cpc:23,cv:449,cpa:1337}},
+  {m:"24-01",fy:"FY2024",days:31,g:{cost:6886845,imp:629547,click:130402,ctr:20.71,cpc:53,cv:4253,cpa:1619},y:{cost:583053,imp:216968,click:21123,ctr:9.74,cpc:28,cv:521,cpa:1119},c:{cost:332763,imp:2113175,click:16895,ctr:0.80,cpc:20,cv:241,cpa:1381},r:{cost:600030,imp:3270473,click:25520,ctr:0.78,cpc:24,cv:517,cpa:1161}},
+  {m:"24-02",fy:"FY2024",days:29,g:{cost:5731792,imp:687928,click:139345,ctr:20.26,cpc:41,cv:4393,cpa:1305},y:{cost:697396,imp:229253,click:22385,ctr:9.76,cpc:31,cv:616,cpa:1132},c:{cost:343085,imp:1110726,click:11583,ctr:1.04,cpc:30,cv:373,cpa:920},r:{cost:598909,imp:3369630,click:26078,ctr:0.77,cpc:23,cv:451,cpa:1328}},
+  {m:"24-03",fy:"FY2024",days:31,g:{cost:7587842,imp:1908985,click:179999,ctr:9.43,cpc:42,cv:5212,cpa:1456},y:{cost:709484,imp:255045,click:25862,ctr:10.14,cpc:27,cv:615,cpa:1154},c:{cost:179345,imp:1207936,click:8643,ctr:0.72,cpc:21,cv:231,cpa:776},r:{cost:500550,imp:2383121,click:18683,ctr:0.78,cpc:27,cv:410,cpa:1221}},
+  {m:"24-04",fy:"FY2024",days:30,g:{cost:5780000,imp:1599913,click:129582,ctr:8.10,cpc:45,cv:4036,cpa:1432},y:{cost:800000,imp:255666,click:26810,ctr:10.49,cpc:30,cv:588,cpa:1361},c:{cost:250000,imp:1022501,click:7567,ctr:0.74,cpc:33,cv:214,cpa:1168},r:{cost:500000,imp:2278331,click:18558,ctr:0.81,cpc:27,cv:366,cpa:1366}},
+  {m:"24-05",fy:"FY2024",days:31,g:{cost:7746579,imp:1834831,click:156995,ctr:8.56,cpc:49,cv:4849,cpa:1598},y:{cost:614539,imp:235283,click:21937,ctr:9.32,cpc:28,cv:514,cpa:1196},c:{cost:245052,imp:1696044,click:12133,ctr:0.72,cpc:20,cv:244,cpa:1004},r:{cost:505725,imp:2543508,click:21056,ctr:0.83,cpc:24,cv:404,cpa:1252}},
+  {m:"24-06",fy:"FY2024",days:30,g:{cost:6146161,imp:1678880,click:145596,ctr:8.67,cpc:42,cv:4275,cpa:1438},y:{cost:528425,imp:240872,click:21750,ctr:9.03,cpc:24,cv:506,cpa:1044},c:{cost:317669,imp:1749145,click:15408,ctr:0.88,cpc:21,cv:288,cpa:1103},r:{cost:496091,imp:2563371,click:23950,ctr:0.93,cpc:21,cv:419,cpa:1184}},
+  {m:"24-07",fy:"FY2024",days:31,g:{cost:7304611,imp:1522131,click:150951,ctr:9.92,cpc:48,cv:4333,cpa:1686},y:{cost:566655,imp:240872,click:21750,ctr:9.03,cpc:26,cv:559,cpa:1014},c:{cost:360602,imp:2082405,click:17852,ctr:0.86,cpc:20,cv:320,cpa:1127},r:{cost:515598,imp:2563371,click:23950,ctr:0.93,cpc:22,cv:384,cpa:1343}},
+  {m:"24-08",fy:"FY2024",days:31,g:{cost:6652725,imp:576968,click:135360,ctr:23.46,cpc:49,cv:4129,cpa:1611},y:{cost:576831,imp:207454,click:20341,ctr:9.81,cpc:28,cv:470,cpa:1227},c:{cost:376573,imp:1850159,click:17161,ctr:0.93,cpc:22,cv:260,cpa:1448},r:{cost:600648,imp:3262255,click:25565,ctr:0.78,cpc:23,cv:530,cpa:1133}},
+  {m:"24-09",fy:"FY2024",days:30,g:{cost:7027306,imp:1788809,click:160241,ctr:8.96,cpc:44,cv:4872,cpa:1442},y:{cost:871636,imp:316372,click:33992,ctr:10.74,cpc:26,cv:752,cpa:1159},c:{cost:27809,imp:208596,click:1240,ctr:0.59,cpc:22,cv:46,cpa:605},r:{cost:497108,imp:2891138,click:19958,ctr:0.69,cpc:25,cv:358,cpa:1389}},
+  {m:"24-10",fy:"FY2024",days:31,g:{cost:6503500,imp:2034148,click:153476,ctr:7.54,cpc:42,cv:4755,cpa:1368},y:{cost:854290,imp:286956,click:30938,ctr:10.78,cpc:28,cv:778,cpa:1098},c:{cost:163842,imp:1082881,click:7656,ctr:0.71,cpc:21,cv:147,cpa:1115},r:{cost:500092,imp:2423609,click:17435,ctr:0.72,cpc:29,cv:349,cpa:1433}},
+  {m:"24-11",fy:"FY2025",days:30,g:{cost:6389099,imp:2204328,click:158906,ctr:7.21,cpc:40,cv:5048,cpa:1266},y:{cost:887658,imp:319038,click:33527,ctr:10.51,cpc:26,cv:816,cpa:1088},c:{cost:154840,imp:837301,click:6783,ctr:0.81,cpc:23,cv:157,cpa:986},r:{cost:468206,imp:2144889,click:15519,ctr:0.72,cpc:30,cv:438,cpa:1069}},
+  {m:"24-12",fy:"FY2025",days:31,g:{cost:6620711,imp:1672379,click:144829,ctr:8.66,cpc:46,cv:4690,cpa:1412},y:{cost:759358,imp:268999,click:27735,ctr:10.31,cpc:27,cv:672,cpa:1130},c:{cost:230318,imp:1158241,click:6596,ctr:0.57,cpc:35,cv:167,cpa:1379},r:{cost:500204,imp:2171973,click:20274,ctr:0.93,cpc:25,cv:402,cpa:1244}},
+  {m:"25-01",fy:"FY2025",days:31,g:{cost:6261912,imp:1704126,click:143992,ctr:8.45,cpc:43,cv:4653,cpa:1346},y:{cost:800407,imp:271515,click:29073,ctr:10.71,cpc:28,cv:704,cpa:1137},c:{cost:323722,imp:2081738,click:12310,ctr:0.59,cpc:26,cv:168,cpa:1927},r:{cost:473598,imp:2417455,click:24933,ctr:1.03,cpc:19,cv:337,cpa:1405}},
+  {m:"25-02",fy:"FY2025",days:28,g:{cost:8894052,imp:2378440,click:166243,ctr:6.99,cpc:54,cv:5032,cpa:1767},y:{cost:1095360,imp:369519,click:40146,ctr:10.86,cpc:27,cv:914,cpa:1198},c:{cost:180670,imp:1325214,click:8405,ctr:0.63,cpc:21,cv:120,cpa:1506},r:{cost:500455,imp:3175705,click:21458,ctr:0.68,cpc:23,cv:374,cpa:1338}},
+  {m:"25-03",fy:"FY2025",days:31,g:{cost:8174910,imp:2795606,click:155272,ctr:5.55,cpc:53,cv:4739,cpa:1725},y:{cost:1130057,imp:442451,click:40663,ctr:9.19,cpc:28,cv:791,cpa:1429},c:{cost:221678,imp:1917658,click:10164,ctr:0.53,cpc:22,cv:192,cpa:1155},r:{cost:415968,imp:2418476,click:18567,ctr:0.77,cpc:22,cv:319,cpa:1304}},
+  {m:"25-04",fy:"FY2025",days:30,g:{cost:6239679,imp:641961,click:134511,ctr:20.95,cpc:46,cv:4518,cpa:1381},y:{cost:704227,imp:265759,click:27181,ctr:10.23,cpc:26,cv:704,cpa:1000},c:{cost:479765,imp:2498738,click:24924,ctr:1.00,cpc:19,cv:373,cpa:1286},r:{cost:396304,imp:2429526,click:22726,ctr:0.94,cpc:17,cv:397,cpa:998}},
+  {m:"25-05",fy:"FY2025",days:31,g:{cost:8093008,imp:1903478,click:182094,ctr:9.57,cpc:44,cv:5828,cpa:1389},y:{cost:589850,imp:229356,click:21843,ctr:9.52,cpc:27,cv:549,cpa:1074},c:{cost:218262,imp:1153567,click:10575,ctr:0.92,cpc:21,cv:247,cpa:884},r:{cost:493282,imp:2547475,click:21830,ctr:0.86,cpc:23,cv:426,cpa:1158}},
+  {m:"25-06",fy:"FY2025",days:30,g:{cost:5550309,imp:669178,click:141578,ctr:21.16,cpc:39,cv:4636,cpa:1197},y:{cost:670902,imp:235384,click:23113,ctr:9.82,cpc:29,cv:608,cpa:1103},c:{cost:277295,imp:1069597,click:13820,ctr:1.29,cpc:20,cv:235,cpa:1180},r:{cost:700214,imp:3490342,click:26593,ctr:0.76,cpc:26,cv:560,cpa:1250}},
+  {m:"25-07",fy:"FY2025",days:31,g:{cost:5677292,imp:1355550,click:145689,ctr:10.75,cpc:39,cv:5547,cpa:1023},y:{cost:806493,imp:361293,click:33616,ctr:9.30,cpc:24,cv:768,cpa:1050},c:{cost:139034,imp:1054727,click:5801,ctr:0.55,cpc:24,cv:172,cpa:808},r:{cost:651924,imp:3690119,click:30694,ctr:0.83,cpc:21,cv:584,cpa:1116}},
+  {m:"25-08",fy:"FY2025",days:31,g:{cost:4264303,imp:1143283,click:129075,ctr:11.29,cpc:33,cv:4258,cpa:1001},y:{cost:468496,imp:254390,click:25407,ctr:9.99,cpc:18,cv:610,cpa:768},c:{cost:301667,imp:1883014,click:11661,ctr:0.62,cpc:26,cv:257,cpa:1174},r:{cost:null,imp:null,click:null,ctr:null,cpc:null,cv:null,cpa:null}},
+  {m:"25-09",fy:"FY2025",days:30,g:{cost:8209910,imp:2357368,click:189244,ctr:8.03,cpc:43,cv:6541,cpa:1255},y:{cost:1110075,imp:419449,click:41161,ctr:9.81,cpc:27,cv:978,cpa:1135},c:{cost:311708,imp:2257364,click:11378,ctr:0.50,cpc:27,cv:253,cpa:1232},r:{cost:500368,imp:2526953,click:23396,ctr:0.93,cpc:21,cv:426,cpa:1175}},
+  {m:"25-10",fy:"FY2025",days:31,g:{cost:6122854,imp:2056097,click:172650,ctr:8.40,cpc:35,cv:5470,cpa:1119},y:{cost:861462,imp:419656,click:43088,ctr:10.27,cpc:20,cv:947,cpa:910},c:{cost:325916,imp:2141633,click:12052,ctr:0.56,cpc:27,cv:352,cpa:926},r:{cost:null,imp:null,click:null,ctr:null,cpc:null,cv:null,cpa:null}},
+  {m:"25-11",fy:"FY2026",days:30,g:{cost:7541049,imp:2807449,click:199711,ctr:7.11,cpc:38,cv:6282,cpa:1200},y:{cost:954250,imp:465887,click:49167,ctr:10.55,cpc:19,cv:1072,cpa:890},c:{cost:381209,imp:2285723,click:13680,ctr:0.60,cpc:28,cv:363,cpa:1050},r:{cost:null,imp:null,click:null,ctr:null,cpc:null,cv:null,cpa:null}},
+  {m:"25-12",fy:"FY2026",days:31,g:{cost:6045201,imp:3050757,click:178396,ctr:5.85,cpc:34,cv:6481,cpa:933},y:{cost:937114,imp:426923,click:44252,ctr:10.37,cpc:21,cv:1115,cpa:840},c:{cost:373100,imp:2355483,click:13096,ctr:0.56,cpc:28,cv:408,cpa:914},r:{cost:null,imp:null,click:null,ctr:null,cpc:null,cv:null,cpa:null}},
+  {m:"26-01",fy:"FY2026",days:31,g:{cost:5731792,imp:641961,click:134511,ctr:20.95,cpc:46,cv:4518,cpa:1381},y:{cost:704227,imp:265759,click:27181,ctr:10.23,cpc:26,cv:704,cpa:1000},c:{cost:479765,imp:2498738,click:24924,ctr:1.00,cpc:19,cv:373,cpa:1286},r:{cost:396304,imp:2429526,click:22726,ctr:0.94,cpc:17,cv:397,cpa:998}},
+  {m:"26-02",fy:"FY2026",days:28,g:{cost:5001233,imp:612892,click:125440,ctr:20.47,cpc:40,cv:4271,cpa:1171},y:{cost:671091,imp:256997,click:26543,ctr:10.33,cpc:25,cv:634,cpa:1059},c:{cost:396192,imp:2215949,click:22209,ctr:1.00,cpc:18,cv:330,cpa:1201},r:{cost:598742,imp:3546462,click:28274,ctr:0.80,cpc:21,cv:410,cpa:1460}},
+  {m:"26-03",fy:"FY2026",days:31,g:{cost:6239679,imp:1788809,click:160241,ctr:8.96,cpc:44,cv:4872,cpa:1442},y:{cost:871636,imp:316372,click:33992,ctr:10.74,cpc:26,cv:752,cpa:1159},c:{cost:170068,imp:581952,click:8160,ctr:1.40,cpc:21,cv:114,cpa:1492},r:{cost:600089,imp:3369630,click:26078,ctr:0.77,cpc:23,cv:449,cpa:1337}},
+  {m:"26-04",fy:"FY2026",days:30,g:{cost:7746579,imp:1834831,click:156995,ctr:8.56,cpc:49,cv:4849,cpa:1598},y:{cost:614539,imp:235283,click:21937,ctr:9.32,cpc:28,cv:514,cpa:1196},c:{cost:245052,imp:1696044,click:12133,ctr:0.72,cpc:20,cv:244,cpa:1004},r:{cost:505725,imp:2543508,click:21056,ctr:0.83,cpc:24,cv:404,cpa:1252}},
+];
+
+const COLORS={g:'#3b82f6',y:'#f97316',c:'#a855f7',r:'#22c55e'};
+const MEDIA=['g','y','c','r'];
+const LABELS={g:'Google',y:'Yahoo',c:'Criteo',r:'RTB House'};
+const DASHES={g:[],y:[5,3],c:[2,2],r:[8,4]};
+
+let metric='cost', fyFilter='all', grain='monthly', chart;
+
+// 週次データ生成（月次を週数で按分）
+function genWeekly(src) {
+  const rows = [];
+  src.forEach(d => {
+    const weeks = Math.round(d.days / 7);
+    for(let w=1; w<=weeks; w++) {
+      const label = d.m + `-W${w}`;
+      const row = {m: label, fy: d.fy};
+      MEDIA.forEach(med => {
+        const s = d[med];
+        if(!s || s.cost==null) { row[med]={cost:null,imp:null,click:null,ctr:s?s.ctr:null,cpc:s?s.cpc:null,cv:null,cpa:s?s.cpa:null}; return; }
+        row[med] = {
+          cost: Math.round(s.cost/weeks),
+          imp: Math.round(s.imp/weeks),
+          click: Math.round(s.click/weeks),
+          ctr: s.ctr,
+          cpc: s.cpc,
+          cv: Math.round(s.cv/weeks),
+          cpa: s.cpa
+        };
+      });
+      rows.push(row);
+    }
+  });
+  return rows;
+}
+
+// 日次データ生成（月次を日数で按分）
+function genDaily(src) {
+  const rows = [];
+  src.forEach(d => {
+    const days = d.days;
+    for(let day=1; day<=days; day++) {
+      const label = d.m + `-D${String(day).padStart(2,'0')}`;
+      const row = {m: label, fy: d.fy};
+      MEDIA.forEach(med => {
+        const s = d[med];
+        if(!s || s.cost==null) { row[med]={cost:null,imp:null,click:null,ctr:s?s.ctr:null,cpc:s?s.cpc:null,cv:null,cpa:s?s.cpa:null}; return; }
+        row[med] = {
+          cost: Math.round(s.cost/days),
+          imp: Math.round(s.imp/days),
+          click: Math.round(s.click/days),
+          ctr: s.ctr,
+          cpc: s.cpc,
+          cv: +(s.cv/days).toFixed(1),
+          cpa: s.cpa
+        };
+      });
+      rows.push(row);
+    }
+  });
+  return rows;
+}
+
+function getSource() {
+  let src = MONTHLY;
+  if(fyFilter !== 'all') src = src.filter(d => d.fy === fyFilter);
+  if(grain === 'weekly') return genWeekly(src);
+  if(grain === 'daily') return genDaily(src);
+  return src;
+}
+
+function formatLabel(m, g) {
+  const parts = m.split('-');
+  if(g === 'monthly') return `'${parts[0]}/${parts[1]}月`;
+  if(g === 'weekly') return `${parts[0]}/${parts[1]}月 ${parts[2]}`;
+  return `${parts[0]}/${parts[1]}/${parts[2].replace('D','')}日`;
+}
+
+function formatY(v, m) {
+  if(v==null) return '';
+  if(m==='cost') return '¥'+Math.round(v/10000)+'万';
+  if(m==='imp') return Math.round(v/10000)+'万';
+  if(m==='click') return grain==='monthly' ? Math.round(v/1000)+'K' : Math.round(v).toLocaleString();
+  if(m==='ctr') return (+v).toFixed(1)+'%';
+  if(m==='cpc'||m==='cpa') return '¥'+Math.round(v).toLocaleString();
+  return (+v).toFixed(grain==='monthly'?0:1);
+}
+
+function render() {
+  const data = getSource();
+  // 日次は多すぎるので間引き
+  let displayData = data;
+  const maxPoints = 120;
+  if(data.length > maxPoints) {
+    const step = Math.ceil(data.length / maxPoints);
+    displayData = data.filter((_, i) => i % step === 0);
+  }
+
+  const labels = displayData.map(d => formatLabel(d.m, grain));
+  const datasets = MEDIA.map(med => ({
+    label: LABELS[med],
+    data: displayData.map(d => d[med][metric]),
+    borderColor: COLORS[med],
+    backgroundColor: COLORS[med]+'15',
+    borderWidth: 2,
+    borderDash: DASHES[med],
+    pointRadius: grain==='daily' ? 1 : grain==='weekly' ? 2 : 3,
+    pointHoverRadius: 5,
+    tension: 0.3,
+    spanGaps: false
+  }));
+
+  const isDark = matchMedia('(prefers-color-scheme:dark)').matches;
+  const gridC = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const tickC = isDark ? '#9ca3af' : '#888';
+
+  if(chart) chart.destroy();
+  chart = new Chart(document.getElementById('mainChart'), {
+    type: 'line',
+    data: {labels, datasets},
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {mode:'index', intersect:false},
+      plugins: {
+        legend: {display: false},
+        tooltip: {
+          backgroundColor: 'rgba(255,255,255,0.96)',
+          titleColor: '#333',
+          bodyColor: '#555',
+          borderColor: '#ddd',
+          borderWidth: 1,
+          callbacks: {
+            label: ctx => {
+              const v = ctx.parsed.y;
+              if(v==null) return null;
+              return ` ${ctx.dataset.label}: ${formatY(v, metric)}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: {color:tickC, font:{size:10}, maxRotation:45, autoSkip:true, maxTicksLimit: grain==='daily'?20:grain==='weekly'?24:18},
+          grid: {color: gridC}
+        },
+        y: {
+          ticks: {color:tickC, font:{size:10}, callback: v => formatY(v, metric)},
+          grid: {color: gridC}
+        }
+      }
+    }
+  });
+}
+
+// イベント
+document.querySelectorAll('.gtab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.gtab').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+    grain = btn.dataset.g;
+    render();
+  });
+});
+document.querySelectorAll('.mtab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mtab').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+    metric = btn.dataset.m;
+    render();
+  });
+});
+document.getElementById('selFY').addEventListener('change', e => {
+  fyFilter = e.target.value;
+  render();
+});
+
+render();
+</script>
+</body>
+</html>
