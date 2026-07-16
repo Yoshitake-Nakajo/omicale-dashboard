@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -124,7 +125,7 @@ let mediaVisible = { g:true, y:true, c:true, r:true };
 let DAILY_REAL = [];      // 実データ（日次・フラット配列）
 let MONTH_MAP = new Map(); // "yy-mm" -> {fy, days:[...]}
 
-// ── スプレッドシート取得 ──
+// ── スプレッドシート取得（JSONP方式：CORS制限を受けない） ──
 function parseGvizDate(v){
   if(typeof v === 'string' && v.indexOf('Date(') === 0){
     const p = v.match(/Date\((\d+),(\d+),(\d+)\)/);
@@ -133,25 +134,49 @@ function parseGvizDate(v){
   return null;
 }
 
-async function fetchSheetMap(sheetName){
-  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?sheet=${encodeURIComponent(sheetName)}&range=A2:H5000&headers=1&tqx=out:json`;
-  const res = await fetch(url);
-  if(!res.ok) throw new Error(`シート取得失敗: ${sheetName} (${res.status})`);
-  const text = await res.text();
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  const json = JSON.parse(text.substring(start, end+1));
-  const map = new Map();
-  (json.table.rows||[]).forEach(r=>{
-    const c = r.c;
-    if(!c || !c[0] || c[0].v==null) return;
-    const dt = parseGvizDate(c[0].v);
-    if(!dt) return;
-    const key = `${dt.y}-${String(dt.mo).padStart(2,'0')}-${String(dt.d).padStart(2,'0')}`;
-    const num = i => (c[i] && typeof c[i].v === 'number') ? c[i].v : null;
-    map.set(key, { imp:num(1), click:num(2), cost:num(5), cv:num(6), _y:dt.y, _mo:dt.mo, _d:dt.d });
+let __jsonpCounter = 0;
+function fetchSheetMap(sheetName){
+  return new Promise((resolve, reject)=>{
+    const cbName = '__gvizCB' + (__jsonpCounter++);
+    let finished = false;
+    const timeoutId = setTimeout(()=>{
+      if(finished) return;
+      finished = true;
+      cleanup();
+      reject(new Error(`タイムアウト: ${sheetName}`));
+    }, 15000);
+    function cleanup(){
+      clearTimeout(timeoutId);
+      try { delete window[cbName]; } catch(e){}
+      if(script.parentNode) script.parentNode.removeChild(script);
+    }
+    window[cbName] = (json)=>{
+      if(finished) return;
+      finished = true;
+      cleanup();
+      const map = new Map();
+      (json.table.rows||[]).forEach(r=>{
+        const c = r.c;
+        if(!c || !c[0] || c[0].v==null) return;
+        const dt = parseGvizDate(c[0].v);
+        if(!dt) return;
+        const key = `${dt.y}-${String(dt.mo).padStart(2,'0')}-${String(dt.d).padStart(2,'0')}`;
+        const num = i => (c[i] && typeof c[i].v === 'number') ? c[i].v : null;
+        map.set(key, { imp:num(1), click:num(2), cost:num(5), cv:num(6), _y:dt.y, _mo:dt.mo, _d:dt.d });
+      });
+      resolve(map);
+    };
+    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?sheet=${encodeURIComponent(sheetName)}&range=A2:H5000&headers=1&tqx=responseHandler:${cbName}`;
+    const script = document.createElement('script');
+    script.src = url;
+    script.onerror = ()=>{
+      if(finished) return;
+      finished = true;
+      cleanup();
+      reject(new Error(`シート取得失敗: ${sheetName}`));
+    };
+    document.head.appendChild(script);
   });
-  return map;
 }
 
 function dateToFY(y, mo){
