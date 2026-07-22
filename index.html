@@ -349,25 +349,19 @@ function formatY(v, m) {
 
 function render() {
   const data = getSource();
-  let displayData = data;
-  const maxPoints = 120;
-  if(data.length > maxPoints) {
-    const step = Math.ceil(data.length / maxPoints);
-    displayData = data.filter((_, i) => i % step === 0);
-  }
 
-  const labels = displayData.map(d => formatLabel(d.m, grain));
+  const labels = data.map(d => formatLabel(d.m, grain));
   const visibleMedia = MEDIA.filter(med => mediaVisible[med]);
   const datasets = visibleMedia.map(med => ({
     label: LABELS[med],
-    data: displayData.map(d => d[med][metric]),
+    data: data.map(d => d[med][metric]),
     borderColor: COLORS[med],
     backgroundColor: COLORS[med]+'15',
     borderWidth: 2,
     borderDash: DASHES[med],
-    pointRadius: grain==='daily' ? 1 : grain==='weekly' ? 2 : 3,
+    pointRadius: grain==='daily' ? (data.length>90 ? 0 : 2) : grain==='weekly' ? 2 : 3,
     pointHoverRadius: 5,
-    tension: 0.3,
+    tension: 0.2,
     spanGaps: false
   }));
 
